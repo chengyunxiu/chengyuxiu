@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>电位差计 B类不确定度计算器</title>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;padding:20px;background:#f0f2f5}
+.box{max-width:900px;margin:auto;background:#fff;padding:25px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+h2{text-align:center;color:#2c3e50}
+.row{display:flex;flex-wrap:wrap;gap:15px;margin-bottom:15px}
+.row label{font-weight:bold}
+.row input{width:80px;padding:5px}
+textarea{width:100%;font-family:monospace;font-size:14px}
+button{background:#2980b9;color:#fff;padding:10px 30px;border:none;border-radius:5px;font-size:16px;cursor:pointer;margin:10px 0}
+button:hover{background:#1c5980}
+table{width:100%;border-collapse:collapse;margin-top:15px}
+th,td{border:1px solid #ddd;padding:6px;text-align:center;font-size:13px}
+th{background:#3498db;color:#fff}
+.result{margin-top:20px}
+</style>
+</head>
+<body>
+<div class="box">
+<h2>电位差计校准电表 — B类不确定度计算</h2>
+
+<div class="row">
+<label>标准电阻 Rs(Ω):<input id="Rs" value="100"></label>
+<label>电阻等级(%):<input id="dr" value="0.05"></label>
+<label>电位差计等级(%):<input id="pg" value="0.05"></label>
+<label>最小分度 ΔU(mV):<input id="du" value="0.05"></label>
+<label>毫安表量程(mA):<input id="Im" value="1.0"></label>
+</div>
+
+<p><b>数据输入</b>（格式：刻度  U正  U反，空格隔开，一行一个点）</p>
+<textarea id="data" rows="12">
+0.10 10.02 10.04
+0.20 20.01 20.05
+0.30 30.03 30.07
+0.40 40.02 40.06
+0.50 50.01 50.03
+0.60 60.04 60.08
+0.70 70.03 70.07
+0.80 80.05 80.09
+0.90 90.04 90.08
+1.00 100.06 100.10
+</textarea>
+
+<button onclick="calc()">开始计算</button>
+<div class="result" id="out"></div>
+</div>
+
+<script>
+function calc(){
+let Rs=parseFloat(document.getElementById('Rs').value);
+let dr=parseFloat(document.getElementById('dr').value);
+let pg=parseFloat(document.getElementById('pg').value);
+let du=parseFloat(document.getElementById('du').value);
+let Im=parseFloat(document.getElementById('Im').value);
+let 电阻误差限=(dr/100)*Rs;
+let 电阻B类不确定度=电阻误差限/Math.sqrt(3);
+
+let raw=document.getElementById('data').value.trim().split('\n');
+let data=[];
+for(let line of raw){
+  line=line.trim();
+  if(line==='') continue;
+  let p=line.split(/\s+/);
+  if(p.length>=3) data.push([parseFloat(p[0]),parseFloat(p[1]),parseFloat(p[2])]);
+}
+
+let html=`<p>标准电阻B类标准不确定度 u<sub>B</sub>(R<sub>s</sub>) = <b>${电阻B类不确定度.toFixed(4)}</b> Ω</p>`;
+html+=`<table><tr>
+  <th>刻度<br>(mA)</th>
+  <th>U<sub>平均</sub><br>(mV)</th>
+  <th>标准电流 I<sub>0</sub><br>(mA)</th>
+  <th>修正值 ΔI<br>(mA)</th>
+  <th>电位差计误差限<br>ΔU<sub>x</sub>(mV)</th>
+  <th>电位差计B类<br>u<sub>B1</sub>(mV)</th>
+  <th>合成相对<br>不确定度(%)</th>
+  <th>合成标准<br>u<sub>c</sub>(mA)</th>
+</tr>`;
+
+let 最大修正值=0;
+for(let r of data){
+  let 刻度=r[0], U正=r[1], U反=r[2];
+  let U平均=(U正+U反)/2;
+  let 标准电流=U平均/Rs;
+  let 修正值=刻度-标准电流;
+  if(Math.abs(修正值)>Math.abs(最大修正值)) 最大修正值=Math.abs(修正值);
+  let 电位差计误差限=(pg/100)*U平均+0.5*du;
+  let 电位差计B类=电位差计误差限/Math.sqrt(3);
+  let 合成相对=Math.sqrt((电位差计B类/U平均)**2+(电阻B类不确定度/Rs)**2);
+  let 合成标准=合成相对*标准电流;
+  html+=`<tr>
+    <td>${刻度.toFixed(2)}</td>
+    <td>${U平均.toFixed(3)}</td>
+    <td>${标准电流.toFixed(4)}</td>
+    <td>${修正值.toFixed(5)}</td>
+    <td>${电位差计误差限.toFixed(4)}</td>
+    <td>${电位差计B类.toFixed(4)}</td>
+    <td>${(合成相对*100).toFixed(4)}</td>
+    <td>${合成标准.toFixed(5)}</td>
+  </tr>`;
+}
+html+=`</table>`;
+
+let 引用误差=(最大修正值/Im)*100;
+html+=`<p><b>最大修正值</b> |ΔI|<sub>max</sub> = ${最大修正值.toFixed(5)} mA</p>`;
+html+=`<p><b>引用误差</b> = ${引用误差.toFixed(2)} %</p>`;
+
+let grades=[0.1,0.2,0.5,1.0,1.5,2.5,5.0];
+for(let g of grades){
+  if(引用误差<=g){ 
+    html+=`<p><b>毫安表定级：</b><span style="color:red;font-size:1.2em">${g} 级</span></p>`; 
+    break; 
+  }
+}
+document.getElementById('out').innerHTML=html;
+}
+</script>
+</body>
+</html>
